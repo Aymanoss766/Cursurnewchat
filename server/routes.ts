@@ -263,13 +263,14 @@ export async function registerRoutes(
 
   app.delete("/api/pages/:id", isAuthenticated, async (req, res) => {
     const { id } = req.params;
+    const pageId = Array.isArray(id) ? id[0] : id;
     const pages = await storage.getPages();
-    const page = pages.find(p => p.id === id);
+    const page = pages.find(p => p.id === pageId);
     if (!page) {
       return res.status(404).json({ message: "Page not found" });
     }
 
-    await storage.removePage(id);
+    await storage.removePage(pageId);
     log(`Page removed: ${page.name}`, "config");
     res.json({ message: `Page "${page.name}" removed successfully` });
   });
@@ -446,7 +447,7 @@ export async function registerRoutes(
     } else {
       res.json({
         verified: false,
-        message: waState.status === "waiting_for_pairing" || waState.status === "waiting_for_qr"
+        message: waState.status === "waiting_for_pairing"
           ? "Still waiting for pairing. Please complete the linking process on your phone."
           : waState.status === "connecting"
             ? "Connection in progress. Please wait..."

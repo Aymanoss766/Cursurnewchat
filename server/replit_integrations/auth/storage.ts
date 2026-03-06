@@ -2,6 +2,13 @@ import { users, type User, type UpsertUser } from "@shared/models/auth";
 import { db } from "../../db";
 import { eq } from "drizzle-orm";
 
+function getDatabaseOrThrow() {
+  if (!db) {
+    throw new Error("DATABASE_URL is required for Replit Auth storage");
+  }
+  return db;
+}
+
 // Interface for auth storage operations
 // (IMPORTANT) These user operations are mandatory for Replit Auth.
 export interface IAuthStorage {
@@ -11,12 +18,14 @@ export interface IAuthStorage {
 
 class AuthStorage implements IAuthStorage {
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const database = getDatabaseOrThrow();
+    const [user] = await database.select().from(users).where(eq(users.id, id));
     return user;
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
+    const database = getDatabaseOrThrow();
+    const [user] = await database
       .insert(users)
       .values(userData)
       .onConflictDoUpdate({
