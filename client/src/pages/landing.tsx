@@ -24,6 +24,7 @@ export default function Landing() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
+  const [devCode, setDevCode] = useState<string | null>(null);
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +58,7 @@ export default function Landing() {
     const result = await register(email, userPassword, userName);
     if (result.success && result.requiresVerification) {
       setPendingEmail(email);
+      setDevCode(result.devCode ?? null);
       setMode("verify-email");
     } else if (!result.success) {
       setError(result.error || "Registration failed");
@@ -77,13 +79,16 @@ export default function Landing() {
     setIsLoading(true); setError(null);
     const result = await resendCode(pendingEmail);
     if (!result.success) setError(result.error || "Failed to resend code");
-    else setError(null);
+    else {
+      setError(null);
+      if (result.devCode) setDevCode(result.devCode);
+    }
     setIsLoading(false);
   };
 
   const resetForm = () => {
     setPassword(""); setEmail(""); setUserPassword(""); setUserName("");
-    setVerifyCode(""); setError(null); setShowPassword(false);
+    setVerifyCode(""); setError(null); setShowPassword(false); setDevCode(null);
   };
 
   const switchMode = (newMode: AuthMode) => {
@@ -383,8 +388,17 @@ export default function Landing() {
                   </motion.div>
                   <h2 className="text-2xl font-bold">Verify Your Email</h2>
                   <p className="text-muted-foreground text-sm mt-1">
-                    We sent a 6-digit code to <span className="font-medium text-foreground">{pendingEmail}</span>
+                    {devCode ? (
+                      <>Email not configured. Your verification code:</>
+                    ) : (
+                      <>We sent a 6-digit code to <span className="font-medium text-foreground">{pendingEmail}</span></>
+                    )}
                   </p>
+                  {devCode && (
+                    <p className="mt-3 text-2xl font-mono font-bold text-green-600 dark:text-green-400 tracking-widest">
+                      {devCode}
+                    </p>
+                  )}
                 </div>
                 <form onSubmit={handleVerify} className="space-y-5">
                   <div className="space-y-2">

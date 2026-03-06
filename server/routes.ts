@@ -133,13 +133,17 @@ export async function registerRoutes(
 
     const code = generateVerificationCode();
     await storage.createVerificationCode(email.toLowerCase().trim(), code);
-    const sent = await sendVerificationEmail(email.toLowerCase().trim(), code);
+    const result = await sendVerificationEmail(email.toLowerCase().trim(), code);
 
-    if (!sent) {
+    if (!result.sent && !result.devCode) {
       return res.status(500).json({ message: "Failed to send verification email" });
     }
 
-    res.json({ message: "Verification code sent to your email", requiresVerification: true });
+    res.json({
+      message: result.sent ? "Verification code sent to your email" : "SMTP not configured - use the code below",
+      requiresVerification: true,
+      ...(result.devCode && { devCode: result.devCode }),
+    });
   });
 
   // Verify email
@@ -207,15 +211,18 @@ export async function registerRoutes(
 
     const code = generateVerificationCode();
     await storage.createVerificationCode(email.toLowerCase().trim(), code);
-    await sendVerificationEmail(email.toLowerCase().trim(), code);
-    res.json({ message: "New verification code sent" });
+    const result = await sendVerificationEmail(email.toLowerCase().trim(), code);
+    res.json({
+      message: result.sent ? "New verification code sent" : "SMTP not configured - use the code below",
+      ...(result.devCode && { devCode: result.devCode }),
+    });
   });
 
-  // Webhook routes (public)
-  app.get("/webhook", async (req, res) => {
+  // Webhook routes (public) - support both /webhook and /webhook/ (Facebook may use trailing slash)
+  const webhookVerify = async (req: any, res: any) => {
     try {
       const config = await storage.getBotConfig(null);
-      const verifyToken = config.verifyToken;
+      const verifyToken = config.verifyToken || process.env.VERIFY_TOKEN || "";
       const mode = String(req.query["hub.mode"] || "");
       const token = String(req.query["hub.verify_token"] || "");
       const challenge = String(req.query["hub.challenge"] || "");
@@ -233,9 +240,10 @@ export async function registerRoutes(
       log(`Webhook verification error: ${error.message}`, "webhook");
       return res.status(500).type("text/plain").send("Internal error");
     }
-  });
+  };
+  app.get(["/webhook", "/webhook/"], webhookVerify);
 
-  app.post("/webhook", (req, res) => {
+  app.post(["/webhook", "/webhook/"], (req, res) => {
     const body = req.body;
 
     log(`Webhook POST received: object=${body?.object}, entries=${body?.entry?.length || 0}`, "webhook");

@@ -9,9 +9,9 @@ interface AuthContextType {
   role: "admin" | "user" | null;
   login: (password: string) => Promise<{ success: boolean; error?: string }>;
   loginUser: (email: string, password: string) => Promise<{ success: boolean; error?: string; requiresVerification?: boolean }>;
-  register: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string; requiresVerification?: boolean }>;
+  register: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string; requiresVerification?: boolean; devCode?: string }>;
   verifyEmail: (email: string, code: string) => Promise<{ success: boolean; error?: string }>;
-  resendCode: (email: string) => Promise<{ success: boolean; error?: string }>;
+  resendCode: (email: string) => Promise<{ success: boolean; error?: string; devCode?: string }>;
   logout: () => void;
 }
 
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const register = useCallback(async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string; requiresVerification?: boolean }> => {
+  const register = useCallback(async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string; requiresVerification?: boolean; devCode?: string }> => {
     try {
       const res = await fetch("/api/register", {
         method: "POST",
@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (res.ok) {
-        return { success: true, requiresVerification: data.requiresVerification };
+        return { success: true, requiresVerification: data.requiresVerification, devCode: data.devCode };
       }
       return { success: false, error: data.message };
     } catch {
@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const resendCode = useCallback(async (email: string): Promise<{ success: boolean; error?: string }> => {
+  const resendCode = useCallback(async (email: string): Promise<{ success: boolean; error?: string; devCode?: string }> => {
     try {
       const res = await fetch("/api/resend-code", {
         method: "POST",
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      return res.ok ? { success: true } : { success: false, error: data.message };
+      return res.ok ? { success: true, devCode: data.devCode } : { success: false, error: data.message };
     } catch {
       return { success: false, error: "Connection error" };
     }
