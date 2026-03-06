@@ -5,37 +5,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
-  Bot,
-  CheckCircle2,
-  XCircle,
-  Copy,
-  Link,
-  Shield,
-  Key,
-  Settings,
-  Sparkles,
-  ImageIcon,
-  Loader2,
-  Zap,
-  Globe,
-  Cpu,
-  Lock,
-  ShieldCheck,
-  AlertTriangle,
-  Eye,
-  EyeOff,
-  Plus,
-  Trash2,
-  FileText,
-  Hash,
-  Phone,
-  MessageSquare,
-  Unplug,
-  RefreshCw,
-  Timer,
-  ClipboardCopy,
-  RotateCw,
-  LogOut,
+  Bot, CheckCircle2, XCircle, Copy, Link, Shield, Key, Settings,
+  Sparkles, ImageIcon, Loader2, Zap, Globe, Cpu, Lock, ShieldCheck,
+  AlertTriangle, Eye, EyeOff, Plus, Trash2, FileText, Hash, Phone,
+  MessageSquare, Unplug, RefreshCw, Timer, ClipboardCopy, RotateCw,
+  LogOut, Activity, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { SiFacebook, SiWhatsapp } from "react-icons/si";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -45,10 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
+  Accordion, AccordionItem, AccordionTrigger, AccordionContent,
 } from "@/components/ui/accordion";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -61,6 +32,8 @@ type StatusResponse = {
   imageConfigured: boolean;
   whatsappConnected: boolean;
   whatsappStatus: string;
+  role?: string;
+  userName?: string;
 };
 
 type WhatsAppStatusResponse = {
@@ -90,26 +63,43 @@ type PageInfo = {
   addedAt: string;
 };
 
-function StatusBadge({ configured }: { configured: boolean }) {
-  if (configured) {
-    return (
-      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400" data-testid="badge-configured">
-        <CheckCircle2 className="mr-1" />
-        Configured
-      </Badge>
-    );
-  }
+function StatusCard({ title, icon: Icon, configured, label, color }: {
+  title: string; icon: any; configured: boolean; label?: string; color: string;
+}) {
+  const colorMap: Record<string, { bg: string; iconBg: string; border: string }> = {
+    indigo: { bg: "from-indigo-500/10 to-indigo-500/5", iconBg: "bg-indigo-100 dark:bg-indigo-900/40", border: "border-indigo-200 dark:border-indigo-800" },
+    blue: { bg: "from-blue-500/10 to-blue-500/5", iconBg: "bg-blue-100 dark:bg-blue-900/40", border: "border-blue-200 dark:border-blue-800" },
+    purple: { bg: "from-purple-500/10 to-purple-500/5", iconBg: "bg-purple-100 dark:bg-purple-900/40", border: "border-purple-200 dark:border-purple-800" },
+    green: { bg: "from-green-500/10 to-green-500/5", iconBg: "bg-green-100 dark:bg-green-900/40", border: "border-green-200 dark:border-green-800" },
+  };
+  const c = colorMap[color] || colorMap.indigo;
+
   return (
-    <Badge variant="outline" className="bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400" data-testid="badge-not-configured">
-      <XCircle className="mr-1" />
-      Not Configured
-    </Badge>
+    <Card className={`overflow-hidden border ${c.border} bg-gradient-to-br ${c.bg} hover:shadow-lg transition-all duration-300`}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className={`rounded-xl ${c.iconBg} p-2.5`}>
+            <Icon className="h-5 w-5 text-current" />
+          </div>
+          {configured ? (
+            <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400 text-[11px] font-medium">
+              <CheckCircle2 className="mr-1 h-3 w-3" />{label || "Active"}
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400 text-[11px] font-medium">
+              <XCircle className="mr-1 h-3 w-3" />Required
+            </Badge>
+          )}
+        </div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </CardContent>
+    </Card>
   );
 }
 
 export default function Dashboard() {
   const { toast } = useToast();
-  const { logout } = useAuth();
+  const { logout, role } = useAuth();
 
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiModel, setAiModel] = useState("");
@@ -132,25 +122,14 @@ export default function Dashboard() {
   const [pairingCodeExpiry, setPairingCodeExpiry] = useState<number | null>(null);
   const [pairingTimeLeft, setPairingTimeLeft] = useState<string>("");
 
-  const { data: status, isLoading: statusLoading } = useQuery<StatusResponse>({
-    queryKey: ["/api/status"],
-  });
-
-  const { data: config, isLoading: configLoading } = useQuery<ConfigResponse>({
-    queryKey: ["/api/config"],
-  });
-
-  const { data: pages, isLoading: pagesLoading } = useQuery<PageInfo[]>({
-    queryKey: ["/api/pages"],
-  });
-
+  const { data: status, isLoading: statusLoading } = useQuery<StatusResponse>({ queryKey: ["/api/status"] });
+  const { data: config, isLoading: configLoading } = useQuery<ConfigResponse>({ queryKey: ["/api/config"] });
+  const { data: pages, isLoading: pagesLoading } = useQuery<PageInfo[]>({ queryKey: ["/api/pages"] });
   const { data: waStatus } = useQuery<WhatsAppStatusResponse>({
     queryKey: ["/api/whatsapp/status"],
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (data?.status === "connecting" || data?.status === "waiting_for_pairing") {
-        return 3000;
-      }
+      if (data?.status === "connecting" || data?.status === "waiting_for_pairing") return 3000;
       return 15000;
     },
   });
@@ -158,87 +137,53 @@ export default function Dashboard() {
   const PAIRING_CODE_TTL = 10 * 60 * 1000;
 
   const waConnectMutation = useMutation({
-    mutationFn: async (data: { phoneNumber: string }) => {
-      const res = await apiRequest("POST", "/api/whatsapp/connect", data);
-      return res.json();
-    },
+    mutationFn: async (data: { phoneNumber: string }) => { const res = await apiRequest("POST", "/api/whatsapp/connect", data); return res.json(); },
     onSuccess: (data) => {
       toast({ title: "WhatsApp Connecting", description: data.message });
-      if (data.pairingCode) {
-        setSavedPairingCode(data.pairingCode);
-        setPairingCodeExpiry(Date.now() + PAIRING_CODE_TTL);
-      }
+      if (data.pairingCode) { setSavedPairingCode(data.pairingCode); setPairingCodeExpiry(Date.now() + PAIRING_CODE_TTL); }
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Connection Failed", description: error.message, variant: "destructive" });
-    },
+    onError: (error: Error) => { toast({ title: "Connection Failed", description: error.message, variant: "destructive" }); },
   });
 
   const waDisconnectMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/whatsapp/disconnect");
-      return res.json();
-    },
+    mutationFn: async () => { const res = await apiRequest("POST", "/api/whatsapp/disconnect"); return res.json(); },
     onSuccess: (data) => {
       toast({ title: "Disconnected", description: data.message });
-      setWaPhoneNumber("");
-      setSavedPairingCode(null);
-      setPairingCodeExpiry(null);
+      setWaPhoneNumber(""); setSavedPairingCode(null); setPairingCodeExpiry(null);
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Disconnect Failed", description: error.message, variant: "destructive" });
-    },
+    onError: (error: Error) => { toast({ title: "Disconnect Failed", description: error.message, variant: "destructive" }); },
   });
 
   const waVerifyMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/whatsapp/verify");
-      return res.json();
-    },
+    mutationFn: async () => { const res = await apiRequest("POST", "/api/whatsapp/verify"); return res.json(); },
     onSuccess: (data) => {
-      if (data.verified) {
-        toast({ title: "Connection Successful!", description: `WhatsApp is active as ${data.connectedName || "your number"}.` });
-      } else {
-        toast({ title: "Not Connected Yet", description: data.message, variant: "destructive" });
-      }
+      if (data.verified) toast({ title: "Connected!", description: `WhatsApp active as ${data.connectedName || "your number"}.` });
+      else toast({ title: "Not Connected Yet", description: data.message, variant: "destructive" });
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Verification Failed", description: error.message, variant: "destructive" });
-    },
+    onError: (error: Error) => { toast({ title: "Verification Failed", description: error.message, variant: "destructive" }); },
   });
 
   useEffect(() => {
     if (waStatus?.pairingCode && !savedPairingCode) {
       setSavedPairingCode(waStatus.pairingCode);
-      if (!pairingCodeExpiry) {
-        setPairingCodeExpiry(Date.now() + PAIRING_CODE_TTL);
-      }
+      if (!pairingCodeExpiry) setPairingCodeExpiry(Date.now() + PAIRING_CODE_TTL);
     }
     if (waStatus?.status === "connected" || waStatus?.status === "disconnected") {
-      setSavedPairingCode(null);
-      setPairingCodeExpiry(null);
+      setSavedPairingCode(null); setPairingCodeExpiry(null);
     }
   }, [waStatus?.pairingCode, waStatus?.status]);
 
   useEffect(() => {
-    if (!pairingCodeExpiry) {
-      setPairingTimeLeft("");
-      return;
-    }
+    if (!pairingCodeExpiry) { setPairingTimeLeft(""); return; }
     const tick = () => {
       const remaining = pairingCodeExpiry - Date.now();
-      if (remaining <= 0) {
-        setSavedPairingCode(null);
-        setPairingCodeExpiry(null);
-        setPairingTimeLeft("");
-        return;
-      }
+      if (remaining <= 0) { setSavedPairingCode(null); setPairingCodeExpiry(null); setPairingTimeLeft(""); return; }
       const mins = Math.floor(remaining / 60000);
       const secs = Math.floor((remaining % 60000) / 1000);
       setPairingTimeLeft(`${mins}:${secs.toString().padStart(2, "0")}`);
@@ -258,25 +203,18 @@ export default function Dashboard() {
     },
     onSuccess: (data) => {
       if (data.pairingCode) {
-        setSavedPairingCode(data.pairingCode);
-        setPairingCodeExpiry(Date.now() + PAIRING_CODE_TTL);
-        toast({ title: "New Pairing Code", description: "A new pairing code has been generated." });
-      } else {
-        toast({ title: "Reconnecting", description: data.message || "Check for QR code." });
-      }
+        setSavedPairingCode(data.pairingCode); setPairingCodeExpiry(Date.now() + PAIRING_CODE_TTL);
+        toast({ title: "New Pairing Code", description: "A new code has been generated." });
+      } else { toast({ title: "Reconnecting", description: data.message || "Reconnecting..." }); }
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Recreate Failed", description: error.message, variant: "destructive" });
-    },
+    onError: (error: Error) => { toast({ title: "Failed", description: error.message, variant: "destructive" }); },
   });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
-        setShowModelDropdown(false);
-      }
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) setShowModelDropdown(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -287,457 +225,272 @@ export default function Dashboard() {
     if (!apiKeyToUse) return;
     setModelsLoading(true);
     try {
-      const token = localStorage.getItem("admin_token");
-      const res = await fetch("/api/models", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ apiKey: apiKeyToUse }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setModelOptions(data);
-      }
-    } catch {
-    } finally {
-      setModelsLoading(false);
-    }
+      const token = localStorage.getItem("auth_token");
+      const res = await fetch("/api/models", { method: "POST", headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: apiKeyToUse }) });
+      if (res.ok) { const data = await res.json(); setModelOptions(data); }
+    } catch {} finally { setModelsLoading(false); }
   }, [aiApiKey]);
 
   const copyPairingCode = useCallback(() => {
     if (savedPairingCode) {
       navigator.clipboard.writeText(savedPairingCode).then(() => {
-        toast({ title: "Copied!", description: "Pairing code copied to clipboard." });
-      }).catch(() => {
-        toast({ title: "Copy Failed", description: "Could not copy to clipboard.", variant: "destructive" });
-      });
+        toast({ title: "Copied!", description: "Pairing code copied." });
+      }).catch(() => { toast({ title: "Copy Failed", variant: "destructive" }); });
     }
   }, [savedPairingCode, toast]);
 
   const aiMutation = useMutation({
-    mutationFn: async (data: { apiKey: string; model: string }) => {
-      const res = await apiRequest("POST", "/api/config/ai", data);
-      return res.json();
-    },
+    mutationFn: async (data: { apiKey: string; model: string }) => { const res = await apiRequest("POST", "/api/config/ai", data); return res.json(); },
     onSuccess: (data) => {
-      toast({ title: "AI Model Activated", description: `Model "${data.openRouterModel}" is now active.` });
-      setAiApiKey("");
-      setAiModel("");
-      setModelSearchQuery("");
-      setModelOptions([]);
+      toast({ title: "AI Model Activated", description: `Model "${data.openRouterModel}" active.` });
+      setAiApiKey(""); setAiModel(""); setModelSearchQuery(""); setModelOptions([]);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/config"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Activation Failed", description: error.message, variant: "destructive" });
-    },
+    onError: (error: Error) => { toast({ title: "Failed", description: error.message, variant: "destructive" }); },
   });
 
   const imageMutation = useMutation({
-    mutationFn: async (data: { apiKey: string; apiUrl: string; model: string }) => {
-      const res = await apiRequest("POST", "/api/config/image", data);
-      return res.json();
-    },
+    mutationFn: async (data: { apiKey: string; apiUrl: string; model: string }) => { const res = await apiRequest("POST", "/api/config/image", data); return res.json(); },
     onSuccess: (data) => {
-      toast({ title: "Image Generation Activated", description: `Configuration saved${data.imageModel ? ` for model "${data.imageModel}"` : ""}.` });
-      setImageApiKey("");
-      setImageApiUrl("");
-      setImageModel("");
+      toast({ title: "Image Config Saved", description: `Saved${data.imageModel ? ` for "${data.imageModel}"` : ""}.` });
+      setImageApiKey(""); setImageApiUrl(""); setImageModel("");
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/config"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Activation Failed", description: error.message, variant: "destructive" });
-    },
+    onError: (error: Error) => { toast({ title: "Failed", description: error.message, variant: "destructive" }); },
   });
 
   const verifyTokenMutation = useMutation({
-    mutationFn: async (data: { token: string }) => {
-      const res = await apiRequest("POST", "/api/config/verify-token", data);
-      return res.json();
-    },
+    mutationFn: async (data: { token: string }) => { const res = await apiRequest("POST", "/api/config/verify-token", data); return res.json(); },
     onSuccess: (data) => {
-      toast({ title: "Verify Token Updated", description: `Token ending in ${data.verifyToken} is now active.` });
+      toast({ title: "Verify Token Updated", description: `Token ending in ${data.verifyToken} active.` });
       setVerifyToken("");
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/config"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
-    },
+    onError: (error: Error) => { toast({ title: "Failed", description: error.message, variant: "destructive" }); },
   });
 
   const addPageMutation = useMutation({
-    mutationFn: async (data: { token: string; name: string }) => {
-      const res = await apiRequest("POST", "/api/pages", data);
-      return res.json();
-    },
+    mutationFn: async (data: { token: string; name: string }) => { const res = await apiRequest("POST", "/api/pages", data); return res.json(); },
     onSuccess: (data) => {
       toast({ title: "Page Connected", description: data.message });
-      setNewPageToken("");
-      setNewPageName("");
-      setShowAddPage(false);
+      setNewPageToken(""); setNewPageName(""); setShowAddPage(false);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/config"] });
       queryClient.invalidateQueries({ queryKey: ["/api/pages"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Failed to Add Page", description: error.message, variant: "destructive" });
-    },
+    onError: (error: Error) => { toast({ title: "Failed", description: error.message, variant: "destructive" }); },
   });
 
   const removePageMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest("DELETE", `/api/pages/${id}`);
-      return res.json();
-    },
+    mutationFn: async (id: string) => { const res = await apiRequest("DELETE", `/api/pages/${id}`); return res.json(); },
     onSuccess: (data) => {
       toast({ title: "Page Removed", description: data.message });
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/config"] });
       queryClient.invalidateQueries({ queryKey: ["/api/pages"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Removal Failed", description: error.message, variant: "destructive" });
-    },
+    onError: (error: Error) => { toast({ title: "Failed", description: error.message, variant: "destructive" }); },
   });
 
   const webhookUrl = window.location.origin + "/webhook";
   const pagesCount = pages?.length ?? 0;
   const maxPages = 15;
-
-  const allConfigured = status
-    ? status.verifyToken && status.pageAccessToken && status.openRouterApiKey
-    : false;
-  const someConfigured = status
-    ? status.verifyToken || status.pageAccessToken || status.openRouterApiKey
-    : false;
+  const allConfigured = status ? status.verifyToken && status.pageAccessToken && status.openRouterApiKey : false;
+  const someConfigured = status ? status.verifyToken || status.pageAccessToken || status.openRouterApiKey : false;
 
   const copyWebhookUrl = () => {
     navigator.clipboard.writeText(webhookUrl).then(() => {
-      toast({ title: "Copied", description: "Webhook URL copied to clipboard." });
+      toast({ title: "Copied", description: "Webhook URL copied." });
     });
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-background dark:from-gray-950 dark:to-background">
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 px-6 py-10 relative overflow-hidden" data-testid="header-section">
-          <div className="absolute inset-0 opacity-20">
-            <div className="absolute top-0 left-1/4 w-48 h-48 bg-white rounded-full blur-3xl" />
-            <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-blue-300 rounded-full blur-3xl" />
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-background to-slate-50/50 dark:from-gray-950 dark:via-background dark:to-gray-950/50">
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-blue-600 to-purple-600" />
+          <div className="absolute inset-0">
+            <div className="absolute top-0 left-[20%] w-[300px] h-[300px] bg-white/5 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 right-[10%] w-[400px] h-[400px] bg-purple-400/10 rounded-full blur-3xl" />
           </div>
-          <div className="max-w-5xl mx-auto relative z-10">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/10">
-                  <Shield className="h-4 w-4 text-white" />
+          <div className="relative px-6 py-8 lg:py-10">
+            <div className="max-w-6xl mx-auto">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20 shadow-lg">
+                    {role === "admin" ? <Shield className="h-5 w-5 text-white" /> : <Bot className="h-5 w-5 text-white" />}
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold text-white/90 tracking-wide uppercase block leading-tight">
+                      {role === "admin" ? "Admin Panel" : "Dashboard"}
+                    </span>
+                    {status?.userName && (
+                      <span className="text-[11px] text-white/50">{status.userName}</span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-sm font-semibold text-white/90 tracking-wide uppercase" data-testid="text-user-name">
-                  Admin Panel
-                </span>
+                <Button variant="ghost" size="sm" onClick={() => logout()}
+                  className="text-white/70 hover:text-white hover:bg-white/15 rounded-xl border border-white/10">
+                  <LogOut className="mr-1.5 h-4 w-4" />Logout
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white/70 hover:text-white hover:bg-white/15 rounded-lg border border-white/10"
-                onClick={() => logout()}
-                data-testid="button-logout"
-              >
-                <LogOut className="mr-1.5 h-4 w-4" />
-                Logout
-              </Button>
-            </div>
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="rounded-2xl bg-white/15 backdrop-blur-sm p-3 border border-white/10">
-                <Bot className="h-8 w-8 text-white" />
+
+              <div className="flex items-center gap-5 flex-wrap">
+                <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200 }}
+                  className="rounded-2xl bg-white/10 backdrop-blur-md p-4 border border-white/15 shadow-xl"
+                >
+                  <Bot className="h-9 w-9 text-white" />
+                </motion.div>
+                <div>
+                  <h1 className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight">Messenger AI Bot</h1>
+                  <p className="mt-1 text-white/60 text-sm flex items-center gap-3 flex-wrap">
+                    {status?.openRouterModel ? <span className="flex items-center gap-1.5"><Cpu className="h-3 w-3" />{status.openRouterModel}</span> : "AI Powered Chatbot"}
+                    {!statusLoading && (
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold backdrop-blur-sm ${
+                        allConfigured ? "bg-green-400/20 text-green-200 border border-green-400/30" :
+                        someConfigured ? "bg-amber-400/20 text-amber-200 border border-amber-400/30" :
+                        "bg-red-400/20 text-red-200 border border-red-400/30"
+                      }`}>
+                        <Activity className="h-3 w-3" />
+                        {allConfigured ? "All Systems Ready" : someConfigured ? "Partial Setup" : "Setup Required"}
+                      </span>
+                    )}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight" data-testid="text-title">
-                  Messenger AI Bot
-                </h1>
-                <p className="mt-1 text-white/70 text-sm flex items-center gap-3 flex-wrap" data-testid="text-subtitle">
-                  {status?.openRouterModel
-                    ? `Model: ${status.openRouterModel}`
-                    : "OpenRouter AI Powered"}
-                  {!statusLoading && (
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      allConfigured ? "bg-green-400/20 text-green-200 border border-green-400/30" : someConfigured ? "bg-yellow-400/20 text-yellow-200 border border-yellow-400/30" : "bg-red-400/20 text-red-200 border border-red-400/30"
-                    }`} data-testid="status-indicator">
-                      <span className={`h-1.5 w-1.5 rounded-full ${allConfigured ? "bg-green-400" : someConfigured ? "bg-yellow-400" : "bg-red-400"}`} />
-                      {allConfigured ? "All Systems Ready" : someConfigured ? "Partial Setup" : "Setup Required"}
+
+              {status && (status.pagesCount > 0 || status.whatsappConnected) && (
+                <div className="mt-5 flex items-center gap-3 flex-wrap">
+                  {status.pagesCount > 0 && (
+                    <span className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white/90 text-xs font-medium px-3.5 py-1.5 rounded-full border border-white/10">
+                      <SiFacebook className="h-3.5 w-3.5" />{status.pagesCount} {status.pagesCount === 1 ? "Page" : "Pages"}
                     </span>
                   )}
-                </p>
-              </div>
+                  {status.whatsappConnected && (
+                    <span className="inline-flex items-center gap-2 bg-green-400/15 text-green-200 text-xs font-medium px-3.5 py-1.5 rounded-full border border-green-400/20">
+                      <SiWhatsapp className="h-3.5 w-3.5" />WhatsApp Active
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-            {status && (status.pagesCount > 0 || status.whatsappConnected) && (
-              <div className="mt-5 flex items-center gap-3 flex-wrap">
-                {status.pagesCount > 0 && (
-                  <span className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white/90 text-xs font-medium px-3.5 py-1.5 rounded-full border border-white/10">
-                    <SiFacebook className="h-3.5 w-3.5" />
-                    {status.pagesCount} {status.pagesCount === 1 ? "Page" : "Pages"}
-                  </span>
-                )}
-                {status.whatsappConnected && (
-                  <span className="inline-flex items-center gap-2 bg-green-400/15 text-green-200 text-xs font-medium px-3.5 py-1.5 rounded-full border border-green-400/20">
-                    <SiWhatsapp className="h-3.5 w-3.5" />
-                    WhatsApp Active
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </motion.div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-        >
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" data-testid="text-config-heading">
+      <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+        {/* Status Cards */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+          <div className="flex items-center gap-2 mb-5">
             <Sparkles className="h-5 w-5 text-indigo-500" />
-            Configuration Status
-          </h2>
+            <h2 className="text-lg font-bold">Configuration Status</h2>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {statusLoading ? (
-              <>
-                <Card className="shadow-md"><CardContent className="pt-6"><Skeleton className="h-16 w-full" /></CardContent></Card>
-                <Card className="shadow-md"><CardContent className="pt-6"><Skeleton className="h-16 w-full" /></CardContent></Card>
-                <Card className="shadow-md"><CardContent className="pt-6"><Skeleton className="h-16 w-full" /></CardContent></Card>
-                <Card className="shadow-md"><CardContent className="pt-6"><Skeleton className="h-16 w-full" /></CardContent></Card>
-              </>
+              Array.from({ length: 4 }).map((_, i) => (
+                <Card key={i}><CardContent className="pt-6"><Skeleton className="h-20 w-full" /></CardContent></Card>
+              ))
             ) : (
               <>
-                <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-indigo-500" data-testid="card-verify-token">
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Verify Token</CardTitle>
-                    <div className="rounded-lg bg-indigo-100 dark:bg-indigo-900/30 p-1.5">
-                      <Shield className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <StatusBadge configured={status?.verifyToken ?? false} />
-                  </CardContent>
-                </Card>
-                <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-blue-500" data-testid="card-page-access-token">
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Facebook Pages</CardTitle>
-                    <div className="rounded-lg bg-blue-100 dark:bg-blue-900/30 p-1.5">
-                      <SiFacebook className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {status?.pageAccessToken ? (
-                      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400" data-testid="badge-pages-count">
-                        <CheckCircle2 className="mr-1" />
-                        {status.pagesCount} {status.pagesCount === 1 ? "Page" : "Pages"}
-                      </Badge>
-                    ) : (
-                      <StatusBadge configured={false} />
-                    )}
-                  </CardContent>
-                </Card>
-                <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-purple-500" data-testid="card-openrouter-key">
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">OpenRouter API</CardTitle>
-                    <div className="rounded-lg bg-purple-100 dark:bg-purple-900/30 p-1.5">
-                      <Settings className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <StatusBadge configured={status?.openRouterApiKey ?? false} />
-                  </CardContent>
-                </Card>
-                <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-green-500" data-testid="card-whatsapp-status">
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">WhatsApp</CardTitle>
-                    <div className="rounded-lg bg-green-100 dark:bg-green-900/30 p-1.5">
-                      <SiWhatsapp className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {status?.whatsappConnected ? (
-                      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400" data-testid="badge-wa-status-connected">
-                        <CheckCircle2 className="mr-1" />
-                        Connected
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-gray-50 text-gray-600 dark:bg-gray-950 dark:text-gray-400" data-testid="badge-wa-status-disconnected">
-                        <Unplug className="mr-1" />
-                        Not Linked
-                      </Badge>
-                    )}
-                  </CardContent>
-                </Card>
+                <StatusCard title="Verify Token" icon={Shield} configured={status?.verifyToken ?? false} color="indigo" />
+                <StatusCard title="Facebook Pages" icon={SiFacebook} configured={status?.pageAccessToken ?? false}
+                  label={status?.pagesCount ? `${status.pagesCount} Pages` : undefined} color="blue" />
+                <StatusCard title="OpenRouter API" icon={Settings} configured={status?.openRouterApiKey ?? false} color="purple" />
+                <StatusCard title="WhatsApp" icon={SiWhatsapp} configured={status?.whatsappConnected ?? false}
+                  label={status?.whatsappConnected ? "Connected" : undefined} color="green" />
               </>
             )}
           </div>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
-        >
-          <Card className="shadow-md border-0 bg-gradient-to-r from-slate-50 to-blue-50/50 dark:from-slate-900 dark:to-blue-950/30" data-testid="card-webhook-url">
-            <CardHeader>
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="rounded-lg bg-blue-100 dark:bg-blue-900/30 p-1.5">
-                  <Link className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+        {/* Webhook URL */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.15 }}>
+          <Card className="border-0 bg-gradient-to-r from-slate-50 to-blue-50/50 dark:from-slate-900/50 dark:to-blue-950/20 shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="rounded-xl bg-blue-100 dark:bg-blue-900/40 p-2"><Link className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
+                <div>
+                  <h3 className="text-sm font-bold">Webhook URL</h3>
+                  <p className="text-[11px] text-muted-foreground">Use this as your Facebook Webhook callback URL</p>
                 </div>
-                <CardTitle className="text-base">Webhook URL</CardTitle>
               </div>
-              <CardDescription>
-                Use this URL as your Facebook Webhook callback URL
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2 flex-wrap">
-                <code className="flex-1 min-w-0 truncate rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-4 py-2.5 text-sm font-mono shadow-sm" data-testid="text-webhook-url">
-                  {webhookUrl}
-                </code>
-                <Button variant="outline" size="icon" onClick={copyWebhookUrl} className="shadow-sm h-10 w-10" data-testid="button-copy-webhook">
-                  <Copy />
+              <div className="flex items-center gap-2">
+                <code className="flex-1 min-w-0 truncate rounded-xl bg-white dark:bg-gray-900 border px-4 py-3 text-sm font-mono shadow-sm">{webhookUrl}</code>
+                <Button variant="outline" size="icon" onClick={copyWebhookUrl} className="shadow-sm h-11 w-11 rounded-xl shrink-0">
+                  <Copy className="h-4 w-4" />
                 </Button>
               </div>
             </CardContent>
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-        >
-          <Card className="border-2 border-blue-200 dark:border-blue-900 overflow-hidden shadow-lg shadow-blue-500/5" data-testid="card-facebook-credentials">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-4">
+        {/* Facebook Credentials */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }}>
+          <Card className="border-0 overflow-hidden shadow-lg">
+            <div className="bg-gradient-to-r from-blue-600 via-blue-500 to-sky-500 px-6 py-5">
               <div className="flex items-center gap-3">
-                <div className="rounded-full bg-white/20 p-2">
+                <div className="rounded-2xl bg-white/20 backdrop-blur-sm p-2.5 border border-white/20">
                   <SiFacebook className="h-5 w-5 text-white" />
                 </div>
-                <div>
-                  <h3 className="text-base font-semibold text-white" data-testid="text-fb-credentials-title">Facebook Credentials</h3>
-                  <p className="text-blue-100 text-xs">Manage your Pages and Webhook Verify Token</p>
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-white">Facebook Credentials</h3>
+                  <p className="text-blue-100/80 text-xs">Manage Pages & Webhook Token</p>
                 </div>
-                <div className="ml-auto flex items-center gap-2">
-                  {!configLoading && (config?.verifyToken && pagesCount > 0) ? (
-                    <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30" data-testid="badge-fb-secured">
-                      <ShieldCheck className="mr-1 h-3 w-3" />
-                      Secured
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-yellow-400/20 text-yellow-100 border-yellow-400/30 hover:bg-yellow-400/30" data-testid="badge-fb-incomplete">
-                      <AlertTriangle className="mr-1 h-3 w-3" />
-                      Incomplete
-                    </Badge>
-                  )}
-                </div>
+                {!configLoading && (config?.verifyToken && pagesCount > 0) ? (
+                  <Badge className="bg-white/20 text-white border-white/30"><ShieldCheck className="mr-1 h-3 w-3" />Secured</Badge>
+                ) : (
+                  <Badge className="bg-yellow-400/20 text-yellow-100 border-yellow-400/30"><AlertTriangle className="mr-1 h-3 w-3" />Incomplete</Badge>
+                )}
               </div>
             </div>
             <CardContent className="p-6 space-y-6">
+              {/* Pages Section */}
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <h4 className="text-sm font-semibold">Connected Pages</h4>
-                    <Badge variant="secondary" className="text-xs" data-testid="badge-pages-total">
-                      {pagesCount} / {maxPages}
-                    </Badge>
+                    <h4 className="text-sm font-bold">Connected Pages</h4>
+                    <Badge variant="secondary" className="text-[10px]">{pagesCount} / {maxPages}</Badge>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={() => setShowAddPage(!showAddPage)}
-                    disabled={pagesCount >= maxPages}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                    data-testid="button-add-page"
-                  >
-                    <Plus className="mr-1 h-3.5 w-3.5" />
-                    Add Page
+                  <Button size="sm" onClick={() => setShowAddPage(!showAddPage)} disabled={pagesCount >= maxPages}
+                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl">
+                    <Plus className="mr-1 h-3.5 w-3.5" />Add Page
                   </Button>
                 </div>
 
                 <AnimatePresence>
                   {showAddPage && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2 }}
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}
                       className="overflow-hidden"
                     >
-                      <div className="rounded-lg border-2 border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-4 mb-4 space-y-3" data-testid="add-page-form">
+                      <div className="rounded-2xl border-2 border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-5 mb-4 space-y-3">
                         <div className="space-y-2">
-                          <Label htmlFor="new-page-name" className="text-xs">Page Name (optional)</Label>
-                          <Input
-                            id="new-page-name"
-                            type="text"
-                            placeholder="My Business Page"
-                            value={newPageName}
-                            onChange={(e) => setNewPageName(e.target.value)}
-                            data-testid="input-new-page-name"
-                          />
-                          <p className="text-xs text-muted-foreground">Leave empty to auto-detect from Facebook</p>
+                          <Label className="text-xs font-medium">Page Name (optional)</Label>
+                          <Input type="text" placeholder="My Business Page" value={newPageName} onChange={(e) => setNewPageName(e.target.value)} />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="new-page-token" className="text-xs">Page Access Token</Label>
+                          <Label className="text-xs font-medium">Page Access Token</Label>
                           <div className="relative">
-                            <Input
-                              id="new-page-token"
-                              type={showNewPageToken ? "text" : "password"}
-                              placeholder="EAAxxxxxxx..."
-                              value={newPageToken}
-                              onChange={(e) => setNewPageToken(e.target.value)}
-                              className="pr-10"
-                              data-testid="input-new-page-token"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowNewPageToken(!showNewPageToken)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                              data-testid="button-toggle-new-page-token-visibility"
-                            >
+                            <Input type={showNewPageToken ? "text" : "password"} placeholder="EAAxxxxxxx..." value={newPageToken}
+                              onChange={(e) => setNewPageToken(e.target.value)} className="pr-10" />
+                            <button type="button" onClick={() => setShowNewPageToken(!showNewPageToken)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                               {showNewPageToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
                           </div>
-                          <p className="text-xs text-muted-foreground">From your Facebook App Dashboard &gt; Messenger &gt; Access Tokens</p>
                         </div>
                         <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              if (!newPageToken.trim()) {
-                                toast({ title: "Missing Token", description: "Please enter a Page Access Token.", variant: "destructive" });
-                                return;
-                              }
-                              addPageMutation.mutate({ token: newPageToken.trim(), name: newPageName.trim() });
-                            }}
-                            disabled={addPageMutation.isPending}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                            data-testid="button-confirm-add-page"
-                          >
-                            {addPageMutation.isPending ? (
-                              <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Connecting...</>
-                            ) : (
-                              <><Plus className="mr-2 h-3.5 w-3.5" />Connect Page</>
-                            )}
+                          <Button size="sm" onClick={() => {
+                            if (!newPageToken.trim()) { toast({ title: "Missing Token", variant: "destructive" }); return; }
+                            addPageMutation.mutate({ token: newPageToken.trim(), name: newPageName.trim() });
+                          }} disabled={addPageMutation.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
+                            {addPageMutation.isPending ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Connecting...</> : <><Plus className="mr-2 h-3.5 w-3.5" />Connect</>}
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => { setShowAddPage(false); setNewPageToken(""); setNewPageName(""); }}
-                            data-testid="button-cancel-add-page"
-                          >
-                            Cancel
-                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setShowAddPage(false); setNewPageToken(""); setNewPageName(""); }}>Cancel</Button>
                         </div>
                       </div>
                     </motion.div>
@@ -745,89 +498,59 @@ export default function Dashboard() {
                 </AnimatePresence>
 
                 {pagesLoading ? (
-                  <div className="space-y-3">
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                  </div>
+                  <div className="space-y-3"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>
                 ) : pagesCount === 0 ? (
-                  <div className="rounded-lg border border-dashed border-muted-foreground/25 p-6 text-center" data-testid="no-pages-message">
-                    <SiFacebook className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                  <div className="rounded-2xl border border-dashed border-muted-foreground/20 p-8 text-center">
+                    <SiFacebook className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
                     <p className="text-sm text-muted-foreground">No pages connected yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Click "Add Page" to connect your first Facebook Page</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Click "Add Page" to connect your first Facebook Page</p>
                   </div>
                 ) : (
-                  <div className="space-y-2" data-testid="pages-list">
+                  <div className="space-y-2">
                     {pages!.map((page, index) => (
-                      <motion.div
-                        key={page.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="flex items-center gap-3 rounded-lg border bg-card p-3 group hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
-                        data-testid={`page-item-${page.id}`}
+                      <motion.div key={page.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }}
+                        className="flex items-center gap-3 rounded-xl border bg-card p-3.5 group hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all"
                       >
-                        <div className="rounded-full bg-blue-100 dark:bg-blue-900/50 p-1.5 shrink-0">
-                          <SiFacebook className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                        <div className="rounded-xl bg-blue-100 dark:bg-blue-900/50 p-2 shrink-0">
+                          <SiFacebook className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium truncate" data-testid={`page-name-${page.id}`}>{page.name}</p>
-                            <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400 shrink-0" data-testid={`page-badge-${page.id}`}>
-                              <Zap className="mr-0.5 h-2 w-2" />
-                              Live
+                            <p className="text-sm font-semibold truncate">{page.name}</p>
+                            <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400 shrink-0">
+                              <Zap className="mr-0.5 h-2 w-2" />Live
                             </Badge>
                           </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                            <span className="flex items-center gap-1 font-mono">
-                              <Key className="h-2.5 w-2.5" />
-                              {page.accessToken}
-                            </span>
-                            {page.facebookPageId && (
-                              <span className="flex items-center gap-1">
-                                <Hash className="h-2.5 w-2.5" />
-                                {page.facebookPageId}
-                              </span>
-                            )}
+                          <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                            <span className="flex items-center gap-1 font-mono"><Key className="h-2.5 w-2.5" />{page.accessToken}</span>
+                            {page.facebookPageId && <span className="flex items-center gap-1"><Hash className="h-2.5 w-2.5" />{page.facebookPageId}</span>}
                           </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => removePageMutation.mutate(page.id)}
-                          disabled={removePageMutation.isPending}
-                          data-testid={`button-remove-page-${page.id}`}
-                        >
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+                          onClick={() => removePageMutation.mutate(page.id)} disabled={removePageMutation.isPending}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </motion.div>
                     ))}
                   </div>
                 )}
-
-                {pagesCount >= maxPages && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1" data-testid="text-max-pages-warning">
-                    <AlertTriangle className="h-3 w-3" />
-                    Maximum of {maxPages} pages reached. Remove a page to add a new one.
-                  </p>
-                )}
               </div>
 
               <Separator />
 
+              {/* Verify Token */}
               <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2">
                   <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <h4 className="text-sm font-semibold">Verify Token</h4>
+                  <h4 className="text-sm font-bold">Verify Token</h4>
                   {!configLoading && config?.verifyToken && (
-                    <Badge variant="outline" className="ml-auto bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400 text-xs" data-testid="badge-verify-token-active">
-                      <Zap className="mr-1 h-2.5 w-2.5" />
-                      Live
+                    <Badge variant="outline" className="ml-auto bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400 text-[10px]">
+                      <Zap className="mr-1 h-2.5 w-2.5" />Live
                     </Badge>
                   )}
                 </div>
                 {!configLoading && config?.verifyToken && (
-                  <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 p-3" data-testid="verify-token-current">
+                  <div className="rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 p-3">
                     <div className="flex items-center gap-2 text-sm">
                       <Lock className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                       <span className="font-mono text-blue-800 dark:text-blue-300">{config.verifyToken}</span>
@@ -835,321 +558,173 @@ export default function Dashboard() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="verify-token" className="text-xs text-muted-foreground">Enter a new Verify Token</Label>
+                  <Label className="text-xs text-muted-foreground">Enter a new Verify Token</Label>
                   <div className="relative">
-                    <Input
-                      id="verify-token"
-                      type={showVerifyToken ? "text" : "password"}
-                      placeholder="my_secret_verify_token"
-                      value={verifyToken}
-                      onChange={(e) => setVerifyToken(e.target.value)}
-                      className="pr-10"
-                      data-testid="input-verify-token"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowVerifyToken(!showVerifyToken)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      data-testid="button-toggle-verify-token-visibility"
-                    >
+                    <Input type={showVerifyToken ? "text" : "password"} placeholder="my_secret_verify_token"
+                      value={verifyToken} onChange={(e) => setVerifyToken(e.target.value)} className="pr-10" />
+                    <button type="button" onClick={() => setShowVerifyToken(!showVerifyToken)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                       {showVerifyToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground">A custom string you define for webhook verification with Facebook</p>
                 </div>
-                <Button
-                  onClick={() => {
-                    if (!verifyToken.trim()) {
-                      toast({ title: "Missing Token", description: "Please enter a Verify Token.", variant: "destructive" });
-                      return;
-                    }
-                    verifyTokenMutation.mutate({ token: verifyToken.trim() });
-                  }}
-                  disabled={verifyTokenMutation.isPending}
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                  data-testid="button-update-verify-token"
-                >
-                  {verifyTokenMutation.isPending ? (
-                    <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Updating...</>
-                  ) : (
-                    <><ShieldCheck className="mr-2 h-3.5 w-3.5" />Update Token</>
-                  )}
+                <Button onClick={() => {
+                  if (!verifyToken.trim()) { toast({ title: "Missing Token", variant: "destructive" }); return; }
+                  verifyTokenMutation.mutate({ token: verifyToken.trim() });
+                }} disabled={verifyTokenMutation.isPending} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl">
+                  {verifyTokenMutation.isPending ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Updating...</> : <><ShieldCheck className="mr-2 h-3.5 w-3.5" />Update Token</>}
                 </Button>
               </div>
             </CardContent>
-            <CardFooter className="bg-muted/30 border-t px-6 py-3">
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Lock className="h-3 w-3" />
-                Tokens are stored securely and never exposed in full. Changes take effect immediately.
+            <CardFooter className="bg-muted/20 border-t px-6 py-3">
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <Lock className="h-3 w-3" />Tokens are stored securely. Changes take effect immediately.
               </p>
             </CardFooter>
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.25 }}
-        >
-          <Card className="border-2 border-green-200 dark:border-green-900 overflow-hidden shadow-lg shadow-green-500/5" data-testid="card-whatsapp">
-            <div className="bg-gradient-to-r from-green-600 to-green-500 px-6 py-4">
+        {/* WhatsApp Connection */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.25 }}>
+          <Card className="border-0 overflow-hidden shadow-lg">
+            <div className="bg-gradient-to-r from-green-600 via-green-500 to-emerald-500 px-6 py-5">
               <div className="flex items-center gap-3">
-                <div className="rounded-full bg-white/20 p-2">
+                <div className="rounded-2xl bg-white/20 backdrop-blur-sm p-2.5 border border-white/20">
                   <SiWhatsapp className="h-5 w-5 text-white" />
                 </div>
-                <div>
-                  <h3 className="text-base font-semibold text-white" data-testid="text-wa-title">WhatsApp Connection</h3>
-                  <p className="text-green-100 text-xs">Link your WhatsApp account to enable AI bot responses</p>
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-white">WhatsApp Connection</h3>
+                  <p className="text-green-100/80 text-xs">Link your WhatsApp for AI responses</p>
                 </div>
-                <div className="ml-auto flex items-center gap-2">
-                  {waStatus?.status === "connected" ? (
-                    <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30" data-testid="badge-wa-connected">
-                      <CheckCircle2 className="mr-1 h-3 w-3" />
-                      Connected
-                    </Badge>
-                  ) : waStatus?.status === "waiting_for_pairing" || waStatus?.status === "connecting" ? (
-                    <Badge className="bg-yellow-400/20 text-yellow-100 border-yellow-400/30 hover:bg-yellow-400/30" data-testid="badge-wa-connecting">
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      Linking...
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-white/10 text-white/70 border-white/20 hover:bg-white/20" data-testid="badge-wa-disconnected">
-                      <Unplug className="mr-1 h-3 w-3" />
-                      Not Connected
-                    </Badge>
-                  )}
-                </div>
+                {waStatus?.status === "connected" ? (
+                  <Badge className="bg-white/20 text-white border-white/30"><CheckCircle2 className="mr-1 h-3 w-3" />Connected</Badge>
+                ) : waStatus?.status === "waiting_for_pairing" || waStatus?.status === "connecting" ? (
+                  <Badge className="bg-yellow-400/20 text-yellow-100 border-yellow-400/30"><Loader2 className="mr-1 h-3 w-3 animate-spin" />Linking...</Badge>
+                ) : (
+                  <Badge className="bg-white/10 text-white/70 border-white/20"><Unplug className="mr-1 h-3 w-3" />Offline</Badge>
+                )}
               </div>
             </div>
             <CardContent className="p-6 space-y-5">
               {waStatus?.status === "connected" ? (
                 <div className="space-y-4">
-                  <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 p-4" data-testid="wa-connected-info">
+                  <div className="rounded-2xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 p-5">
                     <div className="flex items-center gap-3">
-                      <div className="rounded-full bg-green-100 dark:bg-green-900/50 p-2">
-                        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      <div className="rounded-full bg-green-100 dark:bg-green-900/50 p-2.5">
+                        <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-green-800 dark:text-green-300" data-testid="text-wa-connected-label">Connection Successful!</p>
+                        <p className="text-sm font-bold text-green-800 dark:text-green-300">Connection Successful!</p>
                         <p className="text-xs text-green-600 dark:text-green-400">
-                          WhatsApp is active{waStatus.connectedName ? ` as ${waStatus.connectedName}` : ""}
+                          Active{waStatus.connectedName ? ` as ${waStatus.connectedName}` : ""}
                         </p>
                       </div>
-                      <Badge variant="outline" className="ml-auto bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400 shrink-0" data-testid="badge-wa-active">
-                        <Zap className="mr-0.5 h-2.5 w-2.5" />
-                        Active
+                      <Badge variant="outline" className="ml-auto bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400 shrink-0">
+                        <Zap className="mr-0.5 h-2.5 w-2.5" />Active
                       </Badge>
                     </div>
                     {waStatus.connectedAt && (
-                      <p className="text-xs text-green-500 dark:text-green-500 mt-2 ml-12">
-                        Connected since {new Date(waStatus.connectedAt).toLocaleString()}
-                      </p>
+                      <p className="text-xs text-green-500 mt-3 ml-[52px]">Since {new Date(waStatus.connectedAt).toLocaleString()}</p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MessageSquare className="h-4 w-4" />
-                    <span>Incoming WhatsApp messages will receive AI-powered responses automatically.</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:border-red-900 dark:hover:bg-red-950/30"
-                    onClick={() => waDisconnectMutation.mutate()}
-                    disabled={waDisconnectMutation.isPending}
-                    data-testid="button-wa-disconnect"
-                  >
-                    {waDisconnectMutation.isPending ? (
-                      <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Disconnecting...</>
-                    ) : (
-                      <><Unplug className="mr-2 h-3.5 w-3.5" />Disconnect WhatsApp</>
-                    )}
+                  <Button variant="outline" size="sm" onClick={() => waDisconnectMutation.mutate()} disabled={waDisconnectMutation.isPending}
+                    className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 rounded-xl">
+                    {waDisconnectMutation.isPending ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Disconnecting...</> : <><Unplug className="mr-2 h-3.5 w-3.5" />Disconnect</>}
                   </Button>
                 </div>
               ) : waStatus?.status === "waiting_for_pairing" || waStatus?.status === "connecting" ? (
                 <div className="space-y-5">
                   {savedPairingCode ? (
-                    <div className="space-y-3" data-testid="wa-pairing-code-section">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
-                          <h4 className="text-sm font-semibold">Pairing Code</h4>
-                        </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2"><Phone className="h-4 w-4 text-green-600" /><h4 className="text-sm font-bold">Pairing Code</h4></div>
                         {pairingTimeLeft && (
-                          <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-                            <Timer className="h-3.5 w-3.5" />
-                            <span data-testid="text-wa-pairing-timer">Expires in {pairingTimeLeft}</span>
-                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-amber-600"><Timer className="h-3.5 w-3.5" />Expires in {pairingTimeLeft}</div>
                         )}
                       </div>
-                      <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 p-5 text-center">
-                        <p className="text-3xl font-mono font-bold tracking-[0.3em] text-green-800 dark:text-green-200 select-all" data-testid="text-wa-pairing-code">
-                          {savedPairingCode}
-                        </p>
-                        <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-                          Enter this code quickly (within 2 minutes)
-                        </p>
-                        <p className="text-xs text-green-600/70 dark:text-green-400/70 mt-1">
-                          WhatsApp &rarr; Settings &rarr; Linked Devices &rarr; Link a Device &rarr; Enter code
-                        </p>
+                      <div className="rounded-2xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 p-6 text-center">
+                        <p className="text-4xl font-mono font-bold tracking-[0.4em] text-green-800 dark:text-green-200 select-all">{savedPairingCode}</p>
+                        <p className="text-xs text-green-600/80 mt-3">WhatsApp → Settings → Linked Devices → Link a Device → Enter code</p>
                         <div className="flex items-center justify-center gap-2 mt-4">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-green-300 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40"
-                            onClick={copyPairingCode}
-                            data-testid="button-wa-copy-code"
-                          >
-                            <ClipboardCopy className="mr-2 h-3.5 w-3.5" />Copy Code
+                          <Button size="sm" variant="outline" onClick={copyPairingCode}
+                            className="border-green-300 dark:border-green-800 text-green-700 hover:bg-green-100 rounded-xl">
+                            <ClipboardCopy className="mr-2 h-3.5 w-3.5" />Copy
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-green-300 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40"
-                            onClick={() => waRecreateMutation.mutate()}
-                            disabled={waRecreateMutation.isPending}
-                            data-testid="button-wa-recreate-code"
-                          >
-                            {waRecreateMutation.isPending ? (
-                              <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Generating...</>
-                            ) : (
-                              <><RotateCw className="mr-2 h-3.5 w-3.5" />New Code</>
-                            )}
+                          <Button size="sm" variant="outline" onClick={() => waRecreateMutation.mutate()} disabled={waRecreateMutation.isPending}
+                            className="border-green-300 dark:border-green-800 text-green-700 hover:bg-green-100 rounded-xl">
+                            {waRecreateMutation.isPending ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />...</> : <><RotateCw className="mr-2 h-3.5 w-3.5" />New Code</>}
                           </Button>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-3 py-4">
-                      <Loader2 className="h-8 w-8 animate-spin text-green-600 dark:text-green-400" />
+                    <div className="flex flex-col items-center gap-3 py-6">
+                      <Loader2 className="h-10 w-10 animate-spin text-green-600" />
                       <p className="text-sm text-muted-foreground">Generating pairing code...</p>
                     </div>
                   )}
-
                   <Separator />
-
                   <div className="flex items-center gap-3 flex-wrap">
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                      onClick={() => waVerifyMutation.mutate()}
-                      disabled={waVerifyMutation.isPending}
-                      data-testid="button-wa-verify"
-                    >
-                      {waVerifyMutation.isPending ? (
-                        <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Verifying...</>
-                      ) : (
-                        <><RefreshCw className="mr-2 h-3.5 w-3.5" />Verify Connection</>
-                      )}
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white rounded-xl" onClick={() => waVerifyMutation.mutate()} disabled={waVerifyMutation.isPending}>
+                      {waVerifyMutation.isPending ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Verifying...</> : <><RefreshCw className="mr-2 h-3.5 w-3.5" />Verify Connection</>}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => waDisconnectMutation.mutate()}
-                      disabled={waDisconnectMutation.isPending}
-                      data-testid="button-wa-cancel-linking"
-                    >
-                      Cancel
-                    </Button>
-                    <p className="text-xs text-muted-foreground">
-                      After entering the code on your phone, click Verify to confirm.
-                    </p>
+                    <Button variant="ghost" size="sm" onClick={() => waDisconnectMutation.mutate()} disabled={waDisconnectMutation.isPending}>Cancel</Button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {waStatus?.errorMessage && (
-                    <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 p-3 flex items-center gap-2" data-testid="wa-error-message">
-                      <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+                    <div className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 p-3 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
                       <p className="text-sm text-red-700 dark:text-red-400">{waStatus.errorMessage}</p>
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="wa-phone" className="text-sm font-medium">Phone Number</Label>
+                    <Label className="text-sm font-medium">Phone Number</Label>
                     <div className="flex gap-2">
-                      <Input
-                        id="wa-phone"
-                        type="tel"
-                        placeholder="e.g. 212612345678 or +212612345678"
-                        value={waPhoneNumber}
-                        onChange={(e) => setWaPhoneNumber(e.target.value)}
-                        className="flex-1"
-                        data-testid="input-wa-phone"
-                      />
-                      <Button
-                        className="bg-green-600 hover:bg-green-700 text-white shrink-0"
-                        onClick={() => {
-                          if (!waPhoneNumber.trim()) {
-                            toast({ title: "Missing Phone Number", description: "Please enter your WhatsApp phone number.", variant: "destructive" });
-                            return;
-                          }
-                          waConnectMutation.mutate({ phoneNumber: waPhoneNumber.trim() });
-                        }}
-                        disabled={waConnectMutation.isPending}
-                        data-testid="button-wa-connect"
-                      >
-                        {waConnectMutation.isPending ? (
-                          <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Connecting...</>
-                        ) : (
-                          <><Phone className="mr-2 h-3.5 w-3.5" />Link WhatsApp</>
-                        )}
+                      <Input type="tel" placeholder="e.g. 212612345678" value={waPhoneNumber} onChange={(e) => setWaPhoneNumber(e.target.value)} className="flex-1" />
+                      <Button className="bg-green-600 hover:bg-green-700 text-white shrink-0 rounded-xl" onClick={() => {
+                        if (!waPhoneNumber.trim()) { toast({ title: "Missing Phone Number", variant: "destructive" }); return; }
+                        waConnectMutation.mutate({ phoneNumber: waPhoneNumber.trim() });
+                      }} disabled={waConnectMutation.isPending}>
+                        {waConnectMutation.isPending ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />...</> : <><Phone className="mr-2 h-3.5 w-3.5" />Link</>}
                       </Button>
                     </div>
-                    <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 p-2.5 mt-1.5">
-                      <p className="text-xs text-amber-800 dark:text-amber-300 font-medium">
-                        Important: Enter the EXACT phone number registered with your WhatsApp account, including country code. The number must match precisely or the pairing code will be rejected.
+                    <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 p-2.5 mt-2">
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium">
+                        Enter the EXACT phone number registered with WhatsApp, including country code.
                       </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Examples: 212612345678 (Morocco), 12025551234 (US). You can include the + sign or not.
-                    </p>
-                  </div>
-                  <div className="rounded-md bg-muted/50 p-3 space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">How it works:</p>
-                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>Enter your WhatsApp phone number with country code and click &quot;Link WhatsApp&quot;</li>
-                      <li>You&apos;ll receive an 8-character pairing code</li>
-                      <li>On your phone, open WhatsApp &rarr; Settings &rarr; Linked Devices &rarr; Link a Device</li>
-                      <li>Choose &quot;Link with phone number instead&quot; and enter the code</li>
-                      <li>Come back here and click &quot;Verify&quot; to confirm the connection</li>
-                    </ol>
                   </div>
                 </div>
               )}
             </CardContent>
-            <CardFooter className="bg-muted/30 border-t px-6 py-3">
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Lock className="h-3 w-3" />
-                Your WhatsApp session is stored locally and encrypted. Messages are processed through the AI model configured above.
+            <CardFooter className="bg-muted/20 border-t px-6 py-3">
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <Lock className="h-3 w-3" />WhatsApp session is stored securely. Messages processed via configured AI model.
               </p>
             </CardFooter>
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-        >
-          <Card className="shadow-md" data-testid="card-ai-config">
-            <CardHeader>
+        {/* AI Text Model */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }}>
+          <Card className="shadow-md border-0">
+            <CardHeader className="pb-4">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Sparkles className="h-5 w-5 text-muted-foreground" />
-                  <CardTitle className="text-base">AI Text Model</CardTitle>
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded-xl bg-purple-100 dark:bg-purple-900/40 p-2"><Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400" /></div>
+                  <CardTitle className="text-base font-bold">AI Text Model</CardTitle>
                 </div>
                 {!configLoading && config?.openRouterApiKey && (
-                  <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400" data-testid="badge-ai-active">
-                    <Zap className="mr-1 h-3 w-3" />
-                    Active
-                  </Badge>
+                  <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400"><Zap className="mr-1 h-3 w-3" />Active</Badge>
                 )}
               </div>
-              <CardDescription>Configure the OpenRouter API key and model for text responses in Messenger</CardDescription>
+              <CardDescription>Configure OpenRouter API key and model for text responses</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {!configLoading && config?.openRouterApiKey && (
-                <div className="rounded-md bg-muted/50 p-4 space-y-2" data-testid="ai-current-config">
+                <div className="rounded-xl bg-muted/40 p-4 space-y-2">
                   <p className="text-sm font-medium">Current Configuration</p>
                   <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
                     <span className="flex items-center gap-1"><Key className="h-3.5 w-3.5" />{config.openRouterApiKey}</span>
@@ -1160,197 +735,125 @@ export default function Dashboard() {
               )}
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="ai-api-key">OpenRouter API Key</Label>
-                  <Input id="ai-api-key" type="password" placeholder="sk-or-v1-..." value={aiApiKey} onChange={(e) => setAiApiKey(e.target.value)} data-testid="input-ai-api-key" />
-                  <p className="text-xs text-muted-foreground">Get your API key from openrouter.ai/settings/keys</p>
+                  <Label>OpenRouter API Key</Label>
+                  <Input type="password" placeholder="sk-or-v1-..." value={aiApiKey} onChange={(e) => setAiApiKey(e.target.value)} />
+                  <p className="text-[11px] text-muted-foreground">Get your key from openrouter.ai/settings/keys</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ai-model">Model Name (optional)</Label>
+                  <Label>Model Name</Label>
                   <div className="relative" ref={modelDropdownRef}>
                     <div className="flex gap-2">
                       <div className="relative flex-1">
-                        <Input
-                          id="ai-model"
-                          type="text"
-                          placeholder="stepfun/step-3.5-flash:free"
+                        <Input type="text" placeholder="stepfun/step-3.5-flash:free"
                           value={aiModel || modelSearchQuery}
-                          onChange={(e) => {
-                            setModelSearchQuery(e.target.value);
-                            setAiModel("");
-                            if (modelOptions.length > 0) {
-                              setShowModelDropdown(true);
-                            }
-                          }}
-                          onFocus={() => {
-                            if (modelOptions.length > 0) {
-                              setShowModelDropdown(true);
-                            } else if (aiApiKey.trim()) {
-                              fetchModels();
-                            }
-                          }}
-                          data-testid="input-ai-model"
+                          onChange={(e) => { setModelSearchQuery(e.target.value); setAiModel(""); if (modelOptions.length > 0) setShowModelDropdown(true); }}
+                          onFocus={() => { if (modelOptions.length > 0) setShowModelDropdown(true); else if (aiApiKey.trim()) fetchModels(); }}
                         />
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fetchModels()}
-                        disabled={modelsLoading || !aiApiKey.trim()}
-                        data-testid="button-fetch-models"
-                      >
-                        {modelsLoading ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          "Fetch Models"
-                        )}
+                      <Button type="button" variant="outline" size="sm" onClick={() => fetchModels()} disabled={modelsLoading || !aiApiKey.trim()}>
+                        {modelsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Fetch"}
                       </Button>
                     </div>
                     {showModelDropdown && modelOptions.length > 0 && (
-                      <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-md border bg-popover shadow-lg" data-testid="model-dropdown">
-                        {modelOptions
-                          .filter((m) => {
-                            const query = (aiModel || modelSearchQuery).toLowerCase();
-                            if (!query) return true;
-                            return m.name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query);
-                          })
-                          .slice(0, 100)
-                          .map((m) => (
-                            <button
-                              key={m.id}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-sm hover-elevate cursor-pointer"
-                              onClick={() => {
-                                setAiModel(m.id);
-                                setModelSearchQuery("");
-                                setShowModelDropdown(false);
-                              }}
-                              data-testid={`model-option-${m.id}`}
-                            >
-                              <span className="font-medium">{m.name}</span>
-                              <span className="block text-xs text-muted-foreground truncate">{m.id}</span>
-                            </button>
-                          ))}
+                      <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-xl border bg-popover shadow-xl">
+                        {modelOptions.filter((m) => {
+                          const query = (aiModel || modelSearchQuery).toLowerCase();
+                          if (!query) return true;
+                          return m.name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query);
+                        }).slice(0, 100).map((m) => (
+                          <button key={m.id} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 cursor-pointer transition-colors"
+                            onClick={() => { setAiModel(m.id); setModelSearchQuery(""); setShowModelDropdown(false); }}>
+                            <span className="font-medium">{m.name}</span>
+                            <span className="block text-[11px] text-muted-foreground truncate">{m.id}</span>
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">Enter an API key and click "Fetch Models" to browse available models, or type a model ID directly</p>
                 </div>
                 <Button onClick={() => {
-                  if (!aiApiKey.trim()) { toast({ title: "Missing API Key", description: "Please enter an OpenRouter API key.", variant: "destructive" }); return; }
-                  const selectedModel = aiModel.trim() || modelSearchQuery.trim();
-                  aiMutation.mutate({ apiKey: aiApiKey.trim(), model: selectedModel });
-                }} disabled={aiMutation.isPending} className="w-full sm:w-auto" data-testid="button-activate-ai">
-                  {aiMutation.isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>) : (<><Zap className="mr-2 h-4 w-4" />Activate</>)}
+                  if (!aiApiKey.trim()) { toast({ title: "Missing API Key", variant: "destructive" }); return; }
+                  aiMutation.mutate({ apiKey: aiApiKey.trim(), model: (aiModel.trim() || modelSearchQuery.trim()) });
+                }} disabled={aiMutation.isPending} className="w-full sm:w-auto rounded-xl">
+                  {aiMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</> : <><Zap className="mr-2 h-4 w-4" />Activate</>}
                 </Button>
               </div>
             </CardContent>
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.4 }}
-        >
-          <Card className="shadow-md" data-testid="card-image-config">
-            <CardHeader>
+        {/* Image Generation */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.35 }}>
+          <Card className="shadow-md border-0">
+            <CardHeader className="pb-4">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                  <CardTitle className="text-base">Image Generation</CardTitle>
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded-xl bg-pink-100 dark:bg-pink-900/40 p-2"><ImageIcon className="h-5 w-5 text-pink-600 dark:text-pink-400" /></div>
+                  <CardTitle className="text-base font-bold">Image Generation</CardTitle>
                 </div>
                 {!configLoading && config?.imageApiKey && (
-                  <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400" data-testid="badge-image-active">
-                    <Zap className="mr-1 h-3 w-3" />
-                    Active
-                  </Badge>
+                  <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400"><Zap className="mr-1 h-3 w-3" />Active</Badge>
                 )}
               </div>
-              <CardDescription>Configure any image generation API - works with any provider (OpenAI DALL-E, Stability AI, Replicate, etc.)</CardDescription>
+              <CardDescription>Configure any image generation API provider</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {!configLoading && config?.imageApiKey && (
-                <div className="rounded-md bg-muted/50 p-4 space-y-2" data-testid="image-current-config">
+                <div className="rounded-xl bg-muted/40 p-4 space-y-2">
                   <p className="text-sm font-medium">Current Configuration</p>
                   <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
                     <span className="flex items-center gap-1"><Key className="h-3.5 w-3.5" />{config.imageApiKey}</span>
-                    {config.imageApiUrl && (<><Separator orientation="vertical" className="h-4" /><span className="flex items-center gap-1"><Globe className="h-3.5 w-3.5" />{config.imageApiUrl}</span></>)}
-                    {config.imageModel && (<><Separator orientation="vertical" className="h-4" /><span className="flex items-center gap-1"><Cpu className="h-3.5 w-3.5" />{config.imageModel}</span></>)}
+                    {config.imageApiUrl && <><Separator orientation="vertical" className="h-4" /><span className="flex items-center gap-1"><Globe className="h-3.5 w-3.5" />{config.imageApiUrl}</span></>}
+                    {config.imageModel && <><Separator orientation="vertical" className="h-4" /><span className="flex items-center gap-1"><Cpu className="h-3.5 w-3.5" />{config.imageModel}</span></>}
                   </div>
                 </div>
               )}
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="image-api-key">API Key</Label>
-                  <Input id="image-api-key" type="password" placeholder="Enter your API key" value={imageApiKey} onChange={(e) => setImageApiKey(e.target.value)} data-testid="input-image-api-key" />
-                  <p className="text-xs text-muted-foreground">The API key from your image generation provider</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="image-api-url">API Endpoint URL (optional)</Label>
-                  <Input id="image-api-url" type="url" placeholder="https://api.example.com/v1/images/generations" value={imageApiUrl} onChange={(e) => setImageApiUrl(e.target.value)} data-testid="input-image-api-url" />
-                  <p className="text-xs text-muted-foreground">The full API endpoint URL for image generation requests</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="image-model">Model Name (optional)</Label>
-                  <Input id="image-model" type="text" placeholder="e.g., dall-e-3, stable-diffusion-xl" value={imageModel} onChange={(e) => setImageModel(e.target.value)} data-testid="input-image-model" />
-                  <p className="text-xs text-muted-foreground">The specific model to use for image generation</p>
-                </div>
+                <div className="space-y-2"><Label>API Key</Label><Input type="password" placeholder="Enter API key" value={imageApiKey} onChange={(e) => setImageApiKey(e.target.value)} /></div>
+                <div className="space-y-2"><Label>API Endpoint URL (optional)</Label><Input type="url" placeholder="https://api.example.com/v1/images/generations" value={imageApiUrl} onChange={(e) => setImageApiUrl(e.target.value)} /></div>
+                <div className="space-y-2"><Label>Model Name (optional)</Label><Input type="text" placeholder="e.g., dall-e-3" value={imageModel} onChange={(e) => setImageModel(e.target.value)} /></div>
                 <Button onClick={() => {
-                  if (!imageApiKey.trim()) { toast({ title: "Missing API Key", description: "Please enter an API key for the image generation service.", variant: "destructive" }); return; }
+                  if (!imageApiKey.trim()) { toast({ title: "Missing API Key", variant: "destructive" }); return; }
                   imageMutation.mutate({ apiKey: imageApiKey.trim(), apiUrl: imageApiUrl.trim(), model: imageModel.trim() });
-                }} disabled={imageMutation.isPending} className="w-full sm:w-auto" data-testid="button-activate-image">
-                  {imageMutation.isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Applying...</>) : (<><Zap className="mr-2 h-4 w-4" />Activate</>)}
+                }} disabled={imageMutation.isPending} className="w-full sm:w-auto rounded-xl">
+                  {imageMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />...</> : <><Zap className="mr-2 h-4 w-4" />Activate</>}
                 </Button>
               </div>
             </CardContent>
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.5 }}
-        >
-          <Card className="shadow-md" data-testid="card-setup-guide">
-            <CardHeader>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Settings className="h-5 w-5 text-muted-foreground" />
-                <CardTitle className="text-base">Setup Guide</CardTitle>
+        {/* Setup Guide */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.4 }}>
+          <Card className="shadow-md border-0">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-xl bg-amber-100 dark:bg-amber-900/40 p-2"><Settings className="h-5 w-5 text-amber-600 dark:text-amber-400" /></div>
+                <CardTitle className="text-base font-bold">Setup Guide</CardTitle>
               </div>
               <CardDescription>Follow these steps to connect your Facebook Messenger bot</CardDescription>
             </CardHeader>
             <CardContent>
               <Accordion type="single" collapsible>
-                <AccordionItem value="step-1" data-testid="accordion-step-1">
-                  <AccordionTrigger>Step 1: Create a Facebook App</AccordionTrigger>
-                  <AccordionContent>
-                    <p className="text-muted-foreground">Go to developers.facebook.com and create a new app. Select "Business" as the app type. Give your app a name and complete the setup process.</p>
-                  </AccordionContent>
+                <AccordionItem value="step-1">
+                  <AccordionTrigger className="text-sm">Step 1: Create a Facebook App</AccordionTrigger>
+                  <AccordionContent><p className="text-muted-foreground text-sm">Go to developers.facebook.com and create a new app. Select "Business" as the app type.</p></AccordionContent>
                 </AccordionItem>
-                <AccordionItem value="step-2" data-testid="accordion-step-2">
-                  <AccordionTrigger>Step 2: Set up Messenger Product</AccordionTrigger>
-                  <AccordionContent>
-                    <p className="text-muted-foreground">In your Facebook App dashboard, find "Messenger" in the products list and click "Set Up". Connect your Facebook Pages and generate Page Access Tokens for each one. Then add them in the Facebook Credentials panel above.</p>
-                  </AccordionContent>
+                <AccordionItem value="step-2">
+                  <AccordionTrigger className="text-sm">Step 2: Set up Messenger Product</AccordionTrigger>
+                  <AccordionContent><p className="text-muted-foreground text-sm">In your Facebook App dashboard, find "Messenger" and set it up. Connect Pages and generate Access Tokens.</p></AccordionContent>
                 </AccordionItem>
-                <AccordionItem value="step-3" data-testid="accordion-step-3">
-                  <AccordionTrigger>Step 3: Configure Webhook</AccordionTrigger>
-                  <AccordionContent>
-                    <p className="text-muted-foreground">In the Messenger settings, go to the Webhooks section. Click "Add Callback URL" and paste the webhook URL shown above. Enter the same Verify Token you set in the Facebook Credentials panel.</p>
-                  </AccordionContent>
+                <AccordionItem value="step-3">
+                  <AccordionTrigger className="text-sm">Step 3: Configure Webhook</AccordionTrigger>
+                  <AccordionContent><p className="text-muted-foreground text-sm">In Messenger settings, go to Webhooks. Click "Add Callback URL" and paste the webhook URL shown above.</p></AccordionContent>
                 </AccordionItem>
-                <AccordionItem value="step-4" data-testid="accordion-step-4">
-                  <AccordionTrigger>Step 4: Subscribe to Messages</AccordionTrigger>
-                  <AccordionContent>
-                    <p className="text-muted-foreground">After configuring the webhook, subscribe to the "messages" and "messaging_postbacks" events for each page. This allows your bot to receive incoming messages from users.</p>
-                  </AccordionContent>
+                <AccordionItem value="step-4">
+                  <AccordionTrigger className="text-sm">Step 4: Subscribe to Messages</AccordionTrigger>
+                  <AccordionContent><p className="text-muted-foreground text-sm">Subscribe to "messages" and "messaging_postbacks" events for each page.</p></AccordionContent>
                 </AccordionItem>
-                <AccordionItem value="step-5" data-testid="accordion-step-5">
-                  <AccordionTrigger>Step 5: Test the Bot</AccordionTrigger>
-                  <AccordionContent>
-                    <p className="text-muted-foreground">Send a message to any of your connected Facebook Pages via Messenger. The bot should receive the message and respond using the AI model configured above.</p>
-                  </AccordionContent>
+                <AccordionItem value="step-5">
+                  <AccordionTrigger className="text-sm">Step 5: Test the Bot</AccordionTrigger>
+                  <AccordionContent><p className="text-muted-foreground text-sm">Send a message to your connected Facebook Page. The bot should respond using the AI model.</p></AccordionContent>
                 </AccordionItem>
               </Accordion>
             </CardContent>
