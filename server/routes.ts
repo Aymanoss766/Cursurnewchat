@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { log } from "./index";
 import { randomUUID } from "crypto";
-import { isAuthenticated, createToken, ADMIN_PASSWORD } from "./firebaseAuth";
+import { isAuthenticated, isAdmin, createToken, createUserToken, ADMIN_PASSWORD, hashPassword, verifyPassword } from "./firebaseAuth";
+import { generateVerificationCode, sendVerificationEmail } from "./email";
 import {
   connectWhatsApp,
   disconnectWhatsApp,
@@ -14,8 +15,8 @@ import {
   isWhatsAppConnected,
 } from "./whatsapp";
 
-async function getAIResponse(userMessage: string): Promise<string> {
-  const config = await storage.getBotConfig();
+async function getAIResponse(userMessage: string, userId?: string | null): Promise<string> {
+  const config = await storage.getBotConfig(userId);
   const apiKey = config.openRouterApiKey;
   if (!apiKey) {
     throw new Error("OpenRouter API key is not configured");
@@ -66,18 +67,18 @@ async function sendFacebookMessage(senderId: string, messageText: string, pageAc
   }
 }
 
-async function resolvePageToken(entryPageId: string): Promise<string | null> {
+async function resolvePageToken(entryPageId: string): Promise<{ token: string; userId: string | null } | null> {
   const pageConfig = await storage.getPageByFacebookId(entryPageId);
   if (pageConfig) {
-    return pageConfig.accessToken;
+    return { token: pageConfig.accessToken, userId: pageConfig.userId };
   }
 
-  const pages = await storage.getPages();
-  if (pages.length === 1) {
-    return pages[0].accessToken;
+  const allPages = await storage.getAllPages();
+  if (allPages.length === 1) {
+    return { token: allPages[0].accessToken, userId: allPages[0].userId };
   }
 
-  log(`No matching page token found for page ID ${entryPageId} among ${pages.length} configured pages`, "webhook");
+  log(`No matching page token found for page ID ${entryPageId} among ${allPages.length} configured pages`, "webhook");
   return null;
 }
 
@@ -85,17 +86,134 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // Health check for Render
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Admin login
   app.post("/api/login", (req, res) => {
     const { password } = req.body;
     if (!password || password !== ADMIN_PASSWORD) {
       return res.status(401).json({ message: "Invalid password" });
     }
     const token = createToken();
-    res.json({ token, message: "Login successful" });
+    res.json({ token, role: "admin", message: "Login successful" });
   });
 
+  // User registration
+  app.post("/api/register", async (req, res) => {
+    const { email, password, name } = req.body;
+    if (!email || !password || typeof email !== "string" || typeof password !== "string") {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    const existing = await storage.getUserByEmail(email.toLowerCase().trim());
+    if (existing && existing.emailVerified) {
+      return res.status(400).json({ message: "An account with this email already exists" });
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    if (existing && !existing.emailVerified) {
+      // Re-send verification code for unverified account
+    } else {
+      await storage.createUser(email.toLowerCase().trim(), passwordHash, name?.trim() || "User");
+    }
+
+    const code = generateVerificationCode();
+    await storage.createVerificationCode(email.toLowerCase().trim(), code);
+    const sent = await sendVerificationEmail(email.toLowerCase().trim(), code);
+
+    if (!sent) {
+      return res.status(500).json({ message: "Failed to send verification email" });
+    }
+
+    res.json({ message: "Verification code sent to your email", requiresVerification: true });
+  });
+
+  // Verify email
+  app.post("/api/verify-email", async (req, res) => {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ message: "Email and verification code are required" });
+    }
+
+    const valid = await storage.verifyCode(email.toLowerCase().trim(), code.trim());
+    if (!valid) {
+      return res.status(400).json({ message: "Invalid or expired verification code" });
+    }
+
+    await storage.verifyUserEmail(email.toLowerCase().trim());
+    const user = await storage.getUserByEmail(email.toLowerCase().trim());
+    if (!user) {
+      return res.status(400).json({ message: "User not found" });
+    }
+
+    const token = createUserToken(user.id, user.email);
+    res.json({ token, role: "user", userId: user.id, message: "Email verified successfully" });
+  });
+
+  // User login
+  app.post("/api/user/login", async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+
+    const user = await storage.getUserByEmail(email.toLowerCase().trim());
+    if (!user) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    if (!user.emailVerified) {
+      return res.status(401).json({ message: "Please verify your email first", requiresVerification: true });
+    }
+
+    const validPassword = await verifyPassword(password, user.passwordHash);
+    if (!validPassword) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    const token = createUserToken(user.id, user.email);
+    res.json({ token, role: "user", userId: user.id, name: user.name, message: "Login successful" });
+  });
+
+  // Resend verification code
+  app.post("/api/resend-code", async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await storage.getUserByEmail(email.toLowerCase().trim());
+    if (!user) {
+      return res.status(400).json({ message: "No account found with this email" });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ message: "Email is already verified" });
+    }
+
+    const code = generateVerificationCode();
+    await storage.createVerificationCode(email.toLowerCase().trim(), code);
+    await sendVerificationEmail(email.toLowerCase().trim(), code);
+    res.json({ message: "New verification code sent" });
+  });
+
+  // Webhook routes (public)
   app.get("/webhook", async (req, res) => {
-    const config = await storage.getBotConfig();
+    const config = await storage.getBotConfig(null);
     const verifyToken = config.verifyToken;
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
@@ -133,20 +251,20 @@ export async function registerRoutes(
             try {
               log(`Received message from ${senderId} on page ${entryPageId}: ${messageText}`, "webhook");
 
-              const pageToken = await resolvePageToken(entryPageId);
-              if (!pageToken) {
+              const pageInfo = await resolvePageToken(entryPageId);
+              if (!pageInfo) {
                 log(`No page token found for page ${entryPageId}`, "webhook");
                 return;
               }
 
-              let aiResponse = await getAIResponse(messageText);
+              let aiResponse = await getAIResponse(messageText, pageInfo.userId);
               log(`AI response for ${senderId}: ${aiResponse.substring(0, 100)}...`, "webhook");
 
               if (aiResponse.length > 2000) {
                 aiResponse = aiResponse.substring(0, 1997) + "...";
               }
 
-              await sendFacebookMessage(senderId, aiResponse, pageToken);
+              await sendFacebookMessage(senderId, aiResponse, pageInfo.token);
               log(`Response sent to ${senderId} via page ${entryPageId}`, "webhook");
             } catch (error: any) {
               log(`Error processing message from ${senderId}: ${error.message}`, "webhook");
@@ -157,8 +275,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/status", isAuthenticated, async (_req, res) => {
-    const config = await storage.getBotConfig();
+  // Protected routes (admin + user)
+  app.get("/api/status", isAuthenticated, async (req, res) => {
+    const userId = (req as any).authRole === "user" ? (req as any).authUserId : null;
+    const config = await storage.getBotConfig(userId);
     const waState = getWhatsAppState();
     const status = {
       verifyToken: !!config.verifyToken,
@@ -169,12 +289,15 @@ export async function registerRoutes(
       imageConfigured: !!config.imageApiKey,
       whatsappConnected: waState.status === "connected",
       whatsappStatus: waState.status,
+      role: (req as any).authRole,
+      userName: (req as any).authEmail || "Admin",
     };
     res.json(status);
   });
 
-  app.get("/api/config", isAuthenticated, async (_req, res) => {
-    const config = await storage.getBotConfig();
+  app.get("/api/config", isAuthenticated, async (req, res) => {
+    const userId = (req as any).authRole === "user" ? (req as any).authUserId : null;
+    const config = await storage.getBotConfig(userId);
     res.json({
       openRouterApiKey: config.openRouterApiKey ? "••••" + config.openRouterApiKey.slice(-4) : null,
       openRouterModel: config.openRouterModel,
@@ -186,8 +309,9 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/pages", isAuthenticated, async (_req, res) => {
-    const pages = await storage.getPages();
+  app.get("/api/pages", isAuthenticated, async (req, res) => {
+    const userId = (req as any).authRole === "user" ? (req as any).authUserId : null;
+    const pages = await storage.getPages(userId);
     const maskedPages = pages.map(p => ({
       id: p.id,
       name: p.name,
@@ -199,12 +323,13 @@ export async function registerRoutes(
   });
 
   app.post("/api/pages", isAuthenticated, async (req, res) => {
+    const userId = (req as any).authRole === "user" ? (req as any).authUserId : null;
     const { token, name } = req.body;
     if (!token || typeof token !== "string" || token.trim().length < 10) {
       return res.status(400).json({ message: "A valid Page Access Token is required (minimum 10 characters)" });
     }
 
-    const pages = await storage.getPages();
+    const pages = await storage.getPages(userId);
     if (pages.length >= 15) {
       return res.status(400).json({ message: "Maximum of 15 pages reached. Remove a page before adding a new one." });
     }
@@ -246,7 +371,7 @@ export async function registerRoutes(
       addedAt: new Date().toISOString(),
     };
 
-    await storage.addPage(pageConfig);
+    await storage.addPage(pageConfig, userId);
     log(`Page added: ${pageName} (${facebookPageId || "unverified"})`, "config");
 
     res.json({
@@ -262,19 +387,21 @@ export async function registerRoutes(
   });
 
   app.delete("/api/pages/:id", isAuthenticated, async (req, res) => {
-    const { id } = req.params;
-    const pages = await storage.getPages();
+    const userId = (req as any).authRole === "user" ? (req as any).authUserId : null;
+    const id = req.params.id as string;
+    const pages = await storage.getPages(userId);
     const page = pages.find(p => p.id === id);
     if (!page) {
       return res.status(404).json({ message: "Page not found" });
     }
 
-    await storage.removePage(id);
+    await storage.removePage(id, userId);
     log(`Page removed: ${page.name}`, "config");
     res.json({ message: `Page "${page.name}" removed successfully` });
   });
 
   app.post("/api/config/ai", isAuthenticated, async (req, res) => {
+    const userId = (req as any).authRole === "user" ? (req as any).authUserId : null;
     const { apiKey, model } = req.body;
     if (!apiKey || typeof apiKey !== "string") {
       return res.status(400).json({ message: "API key is required" });
@@ -294,7 +421,7 @@ export async function registerRoutes(
     const config = await storage.updateBotConfig({
       openRouterApiKey: apiKey,
       openRouterModel: model || "stepfun/step-3.5-flash:free",
-    });
+    }, userId);
 
     log(`AI config updated: model=${config.openRouterModel}`, "config");
     res.json({
@@ -305,6 +432,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/config/image", isAuthenticated, async (req, res) => {
+    const userId = (req as any).authRole === "user" ? (req as any).authUserId : null;
     const { apiKey, apiUrl, model } = req.body;
     if (!apiKey || typeof apiKey !== "string") {
       return res.status(400).json({ message: "API key is required" });
@@ -314,7 +442,7 @@ export async function registerRoutes(
       imageApiKey: apiKey,
       imageApiUrl: apiUrl || null,
       imageModel: model || null,
-    });
+    }, userId);
 
     log(`Image config updated: url=${config.imageApiUrl}, model=${config.imageModel}`, "config");
     res.json({
@@ -326,6 +454,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/config/verify-token", isAuthenticated, async (req, res) => {
+    const userId = (req as any).authRole === "user" ? (req as any).authUserId : null;
     const { token } = req.body;
     if (!token || typeof token !== "string" || token.trim().length < 4) {
       return res.status(400).json({ message: "A valid Verify Token is required (minimum 4 characters)" });
@@ -333,7 +462,7 @@ export async function registerRoutes(
 
     await storage.updateBotConfig({
       verifyToken: token.trim(),
-    });
+    }, userId);
 
     log(`Verify Token updated`, "config");
     res.json({
@@ -344,9 +473,10 @@ export async function registerRoutes(
 
   app.post("/api/models", isAuthenticated, async (req, res) => {
     try {
+      const userId = (req as any).authRole === "user" ? (req as any).authUserId : null;
       let apiKey = req.body.apiKey as string | undefined;
       if (!apiKey) {
-        const config = await storage.getBotConfig();
+        const config = await storage.getBotConfig(userId);
         apiKey = config.openRouterApiKey || undefined;
       }
       if (!apiKey) {
@@ -373,13 +503,14 @@ export async function registerRoutes(
     }
   });
 
+  // WhatsApp routes (admin only for now)
   setMessageHandler(async (_from: string, message: string) => {
-    return await getAIResponse(message);
+    return await getAIResponse(message, null);
   });
 
   setSessionChangeHandler(async (phone: string | null) => {
     try {
-      await storage.updateBotConfig({ whatsappPhone: phone });
+      await storage.updateBotConfig({ whatsappPhone: phone }, null);
       log(`WhatsApp session ${phone ? "saved" : "cleared"} in database`, "whatsapp");
     } catch (e: any) {
       log(`Failed to update WhatsApp session in database: ${e.message}`, "whatsapp");
@@ -388,7 +519,7 @@ export async function registerRoutes(
 
   (async () => {
     try {
-      const config = await storage.getBotConfig();
+      const config = await storage.getBotConfig(null);
       if (config.whatsappPhone) {
         log(`Found saved WhatsApp session for ${config.whatsappPhone}, auto-reconnecting...`, "whatsapp");
         await autoReconnectWhatsApp(config.whatsappPhone);
@@ -446,7 +577,7 @@ export async function registerRoutes(
     } else {
       res.json({
         verified: false,
-        message: waState.status === "waiting_for_pairing" || waState.status === "waiting_for_qr"
+        message: waState.status === "waiting_for_pairing" || (waState.status as string) === "waiting_for_qr"
           ? "Still waiting for pairing. Please complete the linking process on your phone."
           : waState.status === "connecting"
             ? "Connection in progress. Please wait..."
@@ -455,6 +586,17 @@ export async function registerRoutes(
       });
     }
   });
+
+  // Keep-alive self-ping for Render free tier
+  if (process.env.NODE_ENV === "production" && process.env.RENDER_EXTERNAL_URL) {
+    const PING_INTERVAL = 14 * 60 * 1000;
+    setInterval(async () => {
+      try {
+        await fetch(`${process.env.RENDER_EXTERNAL_URL}/api/health`);
+        log("Keep-alive ping sent", "system");
+      } catch {}
+    }, PING_INTERVAL);
+  }
 
   return httpServer;
 }
