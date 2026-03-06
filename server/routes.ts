@@ -213,21 +213,32 @@ export async function registerRoutes(
 
   // Webhook routes (public)
   app.get("/webhook", async (req, res) => {
-    const config = await storage.getBotConfig(null);
-    const verifyToken = config.verifyToken;
-    const mode = req.query["hub.mode"];
-    const token = req.query["hub.verify_token"];
-    const challenge = req.query["hub.challenge"];
+    try {
+      const config = await storage.getBotConfig(null);
+      const verifyToken = config.verifyToken;
+      const mode = String(req.query["hub.mode"] || "");
+      const token = String(req.query["hub.verify_token"] || "");
+      const challenge = String(req.query["hub.challenge"] || "");
 
-    if (mode === "subscribe" && token === verifyToken) {
-      log("Webhook verified", "webhook");
-      return res.status(200).send(challenge);
+      log(`Webhook verify request: mode=${mode}, token=${token ? "***" + token.slice(-4) : "empty"}, challenge=${challenge ? "present" : "missing"}, storedToken=${verifyToken ? "***" + verifyToken.slice(-4) : "NOT SET"}`, "webhook");
+
+      if (mode === "subscribe" && token === verifyToken) {
+        log("Webhook verified successfully", "webhook");
+        return res.status(200).type("text/plain").send(challenge);
+      }
+
+      log(`Webhook verification FAILED: mode=${mode}, tokenMatch=${token === verifyToken}`, "webhook");
+      return res.status(403).type("text/plain").send("Forbidden");
+    } catch (error: any) {
+      log(`Webhook verification error: ${error.message}`, "webhook");
+      return res.status(500).type("text/plain").send("Internal error");
     }
-    return res.sendStatus(403);
   });
 
   app.post("/webhook", (req, res) => {
     const body = req.body;
+
+    log(`Webhook POST received: object=${body?.object}, entries=${body?.entry?.length || 0}`, "webhook");
 
     if (body.object !== "page") {
       return res.sendStatus(404);
