@@ -1,7 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem("admin_token");
+  const token = localStorage.getItem("auth_token");
   if (token) {
     return { Authorization: `Bearer ${token}` };
   }
