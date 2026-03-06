@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Environment variables (sensitive credentials)
+.env
+.env.local
+.env.production
+
+# Build output
+dist/
+
+# WhatsApp session files
+auth_info_baileys/
+baileys_store.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
